@@ -1,12 +1,23 @@
 {
   "event_id": "evt_8f72a1",
-  "event_type": "purchase",
-  "user_id": "USR_1024",
-  "session_id": "SES_78421",
-  "product_id": "PROD_456",
-  "amount": 1299.0,
-  "currency": "INR",
-  "timestamp": "2026-09-23T18:31:04Z",
-  "device": "mobile",
-  "location": "Pune"
+  "event_type": "PURCHASE",
+  "user": {
+    "user_id": "USR_1024",
+    "session_id": "SES_78421"
+  },
+  "product": {
+    "product_id": "PROD_456",
+    "product_name": "Example Product",
+    "category": "Electronics",
+    "price": 1299.0
+  },
+  "transaction": {
+    "amount": 1299.0,
+    "currency": "INR"
+  },
+  "context": {
+    "device": "mobile",
+    "location": "Pune"
+  },
+  "timestamp": "2026-09-23T18:31:04Z"
 }
