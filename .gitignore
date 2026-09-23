@@ -1,0 +1,43 @@
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.venv/
+venv/
+
+# Environment
+.env
+.env.*
+
+# Node
+node_modules/
+dist/
+
+# Spark
+*.class
+*.jar
+target/
+
+# Logs
+*.log
+logs/
+
+# Data
+data/
+*.parquet
+
+# Temporary
+tmp/
+temp/
+
+# Docker
+docker-volumes/
+s
