@@ -25,6 +25,8 @@ dist/
 *.class
 *.jar
 target/
+spark/data/
+spark/checkpoints/
 
 # Logs
 *.log
