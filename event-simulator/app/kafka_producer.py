@@ -2,44 +2,59 @@ import json
 import logging
 
 from kafka import KafkaProducer
+from kafka.serializer import Serializer
 
 
-logger = logging.getLogger(__name__)
+class StringSerializer(Serializer):
+    def serialize(self, topic, value):
+        if value is None:
+            return None
+
+        return value.encode("utf-8")
+
+
+class JsonSerializer(Serializer):
+    def serialize(self, topic, value):
+        if value is None:
+            return None
+
+        return json.dumps(value).encode("utf-8")
 
 
 class FluxCartKafkaProducer:
-    def __init__(self, bootstrap_servers: str, topic: str):
+
+    def __init__(self, bootstrap_servers, topic):
         self.topic = topic
 
         self.producer = KafkaProducer(
             bootstrap_servers=bootstrap_servers,
-            value_serializer=lambda value: json.dumps(value).encode("utf-8"),
+            key_serializer=StringSerializer(),
+            value_serializer=JsonSerializer(),
             acks="all",
             retries=5,
         )
 
-        logger.info(
+        logging.info(
             "Kafka producer initialized | broker=%s | topic=%s",
             bootstrap_servers,
             topic,
         )
 
-    def publish(self, event: dict):
-        future = self.producer.send(self.topic, value=event)
+    def publish(self, event):
+        user_id = event["user"]["user_id"]
+
+        future = self.producer.send(
+            self.topic,
+            key=user_id,
+            value=event,
+        )
 
         metadata = future.get(timeout=10)
 
-        logger.debug(
-            "Event published | event_id=%s | partition=%s | offset=%s",
-            event["event_id"],
-            metadata.partition,
-            metadata.offset,
-        )
-
         return metadata
 
-    def close(self):
+    def flush(self):
         self.producer.flush()
-        self.producer.close()
 
-        logger.info("Kafka producer closed")
+    def close(self):
+        self.producer.close()
