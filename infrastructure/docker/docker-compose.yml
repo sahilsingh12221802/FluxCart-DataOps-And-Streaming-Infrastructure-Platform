@@ -91,7 +91,7 @@ services:
     container_name: fluxcart-minio
     command: server /data --console-address ":9001"
     env_file:
-      - ../../.env.spark.minio
+      - ../../.env.minio
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -105,7 +105,7 @@ services:
       minio:
         condition: service_started
     env_file:
-      - ../../.env.spark.minio
+      - ../../.env.minio
     environment:
       AWS_DEFAULT_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
