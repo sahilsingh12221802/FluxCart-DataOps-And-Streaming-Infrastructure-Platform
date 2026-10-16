@@ -26,8 +26,9 @@ CHECKPOINT_PATH = os.getenv(
     "CHECKPOINT_PATH", "/opt/fluxcart/checkpoints/raw"
 )
 
-KAFKA_CONNECTOR = (
-    "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0"
+SPARK_PACKAGES = (
+    "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0,"
+    "org.apache.hadoop:hadoop-aws:3.4.1"
 )
 
 event_schema = StructType(
@@ -95,7 +96,21 @@ def main():
     spark = (
         SparkSession.builder
         .appName("FluxCartKafkaStream")
-        .config("spark.jars.packages", KAFKA_CONNECTOR)
+        .config("spark.jars.packages", SPARK_PACKAGES)
+        .config(
+            "spark.hadoop.fs.s3a.endpoint",
+            os.getenv("S3A_ENDPOINT", "http://minio:9000"),
+        )
+        .config("spark.hadoop.fs.s3a.path.style.access", "true")
+        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+                .config(
+            "spark.hadoop.fs.s3a.access.key",
+            os.getenv("S3A_ACCESS_KEY", ""),
+        )
+        .config(
+            "spark.hadoop.fs.s3a.secret.key",
+            os.getenv("S3A_SECRET_KEY", ""),
+        )
         .config("spark.jars.ivy", ivy_dir)
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
@@ -114,7 +129,10 @@ def main():
         .format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
         .option("subscribe", KAFKA_TOPIC)
-        .option("startingOffsets", "latest")
+        .option(
+            "startingOffsets",
+            os.getenv("KAFKA_STARTING_OFFSETS", "latest"),
+        )
         .option("failOnDataLoss", "false")
         .load()
     )
