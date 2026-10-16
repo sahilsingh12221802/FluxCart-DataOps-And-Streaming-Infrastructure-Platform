@@ -103,7 +103,7 @@ def main():
         )
         .config("spark.hadoop.fs.s3a.path.style.access", "true")
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-                .config(
+        .config(
             "spark.hadoop.fs.s3a.access.key",
             os.getenv("S3A_ACCESS_KEY", ""),
         )
