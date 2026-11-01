@@ -43,3 +43,5 @@ temp/
 # Docker
 docker-volumes/
 s
+# Local Hadoop credentials and configuration
+spark/secrets/

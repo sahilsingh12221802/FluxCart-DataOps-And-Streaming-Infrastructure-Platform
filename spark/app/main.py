@@ -3,13 +3,9 @@ import os
 import sys
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json, to_timestamp
-from pyspark.sql.types import (
-    DoubleType,
-    StringType,
-    StructField,
-    StructType,
-)
+from pyspark.sql.functions import (col, concat_ws, from_json, lit,
+                                   to_timestamp, try_to_timestamp, when)
+from pyspark.sql.types import DoubleType, StringType, StructField, StructType
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -24,6 +20,13 @@ KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "ecommerce-events")
 OUTPUT_PATH = os.getenv("OUTPUT_PATH", "/opt/fluxcart/data/raw")
 CHECKPOINT_PATH = os.getenv(
     "CHECKPOINT_PATH", "/opt/fluxcart/checkpoints/raw"
+)
+QUARANTINE_OUTPUT_PATH = os.getenv(
+    "QUARANTINE_OUTPUT_PATH", "/opt/fluxcart/data/quarantine"
+)
+QUARANTINE_CHECKPOINT_PATH = os.getenv(
+    "QUARANTINE_CHECKPOINT_PATH",
+    "/opt/fluxcart/checkpoints/quarantine",
 )
 
 SPARK_PACKAGES = (
@@ -85,8 +88,20 @@ event_schema = StructType(
             ),
             True,
         ),
+        StructField("_corrupt_record", StringType(), True),
     ]
 )
+
+def read_kafka(spark, starting_offsets):
+    return (
+        spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
+        .option("subscribe", KAFKA_TOPIC)
+        .option("startingOffsets", starting_offsets)
+        .option("failOnDataLoss", "false")
+        .load()
+    )
 
 
 def main():
@@ -96,57 +111,34 @@ def main():
     spark = (
         SparkSession.builder
         .appName("FluxCartKafkaStream")
-        .config("spark.jars.packages", SPARK_PACKAGES)
-        .config(
-            "spark.hadoop.fs.s3a.endpoint",
-            os.getenv("S3A_ENDPOINT", "http://minio:9000"),
-        )
-        .config("spark.hadoop.fs.s3a.path.style.access", "true")
-        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-        .config(
-            "spark.hadoop.fs.s3a.access.key",
-            os.getenv("S3A_ACCESS_KEY", ""),
-        )
-        .config(
-            "spark.hadoop.fs.s3a.secret.key",
-            os.getenv("S3A_SECRET_KEY", ""),
-        )
-        .config("spark.jars.ivy", ivy_dir)
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
     )
-
     spark.sparkContext.setLogLevel("WARN")
 
+    starting_offsets = os.getenv("KAFKA_STARTING_OFFSETS", "latest")
+
     logger.info(
-        "Starting FluxCart stream: brokers=%s topic=%s",
+        "Starting FluxCart: brokers=%s topic=%s",
         KAFKA_BOOTSTRAP_SERVERS,
         KAFKA_TOPIC,
     )
 
-    kafka_stream = (
-        spark.readStream
-        .format("kafka")
-        .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
-        .option("subscribe", KAFKA_TOPIC)
-        .option(
-            "startingOffsets",
-            os.getenv("KAFKA_STARTING_OFFSETS", "latest"),
-        )
-        .option("failOnDataLoss", "false")
-        .load()
-    )
+    # Preserve the original raw stream and its existing checkpoint.
+    raw_kafka = read_kafka(spark, starting_offsets)
 
     parsed_stream = (
-        kafka_stream
+        raw_kafka
         .select(
-            from_json(
-                col("value").cast("string"),
-                event_schema,
-            ).alias("event"),
+            col("value").cast("string").alias("raw_payload"),
             col("timestamp").alias("kafka_timestamp"),
             col("partition").alias("kafka_partition"),
             col("offset").alias("kafka_offset"),
+        )
+        .withColumn("event", from_json(col("raw_payload"), event_schema))
+        .withColumn(
+            "event_timestamp",
+            try_to_timestamp(col("event.timestamp")),
         )
         .select(
             col("event.event_id").alias("event_id"),
@@ -162,9 +154,7 @@ def main():
             col("event.context.device").alias("device"),
             col("event.context.location").alias("location"),
             col("event.search.query").alias("search_query"),
-            to_timestamp(
-                col("event.timestamp")
-            ).alias("event_timestamp"),
+            col("event_timestamp"),
             col("kafka_timestamp"),
             col("kafka_partition"),
             col("kafka_offset"),
@@ -177,7 +167,7 @@ def main():
         & col("event_timestamp").isNotNull()
     )
 
-    query = (
+    raw_query = (
         valid_events.writeStream
         .queryName("fluxcart_raw_events")
         .trigger(processingTime="10 seconds")
@@ -188,14 +178,112 @@ def main():
         .start()
     )
 
-    logger.info("Streaming query started. Output: %s", OUTPUT_PATH)
+    logger.info(
+        "Raw stream started: output=%s checkpoint=%s",
+        OUTPUT_PATH,
+        CHECKPOINT_PATH,
+    )
+
+    # Separate source and checkpoint: only newly arriving events are
+    # considered by this new quarantine query on its first start.
+    quarantine_kafka = read_kafka(spark, "latest")
+
+
+    quarantine_base = (
+        quarantine_kafka
+        .select(
+            col("value").cast("string").alias("raw_payload"),
+            col("timestamp").alias("kafka_timestamp"),
+            col("partition").alias("kafka_partition"),
+            col("offset").alias("kafka_offset"),
+        )
+        .withColumn(
+            "event",
+            from_json(
+                col("raw_payload"),
+                event_schema,
+                {"mode": "PERMISSIVE", "columnNameOfCorruptRecord": "_corrupt_record"},
+            ),
+        )
+        .withColumn(
+            "event_timestamp",
+            try_to_timestamp(col("event.timestamp")),
+        )
+    )
+
+
+
+
+    malformed = (
+        col("event").isNull()
+        | col("event._corrupt_record").isNotNull()
+    )
+
+    valid_json_event = (
+        col("event").isNotNull()
+        & col("event._corrupt_record").isNull()
+    )
+
+    rejection_reason = concat_ws(
+        "; ",
+        when(
+            malformed,
+            lit("malformed_json_or_null_event"),
+        ),
+        when(
+            valid_json_event & col("event.event_id").isNull(),
+            lit("missing_event_id"),
+        ),
+        when(
+            valid_json_event & col("event.event_type").isNull(),
+            lit("missing_event_type"),
+        ),
+        when(
+            valid_json_event & col("event_timestamp").isNull(),
+            lit("missing_or_invalid_timestamp"),
+        ),
+    )
+
+
+
+    rejected_events = (
+        quarantine_base
+        .withColumn("rejection_reason", rejection_reason)
+        .filter(col("rejection_reason") != "")
+        .select(
+            "raw_payload",
+            "rejection_reason",
+            col("event.event_id").alias("event_id"),
+            col("event.event_type").alias("event_type"),
+            "kafka_timestamp",
+            "kafka_partition",
+            "kafka_offset",
+        )
+    )
+
+    quarantine_query = (
+        rejected_events.writeStream
+        .queryName("fluxcart_quarantined_events")
+        .trigger(processingTime="10 seconds")
+        .format("parquet")
+        .outputMode("append")
+        .option("path", QUARANTINE_OUTPUT_PATH)
+        .option("checkpointLocation", QUARANTINE_CHECKPOINT_PATH)
+        .start()
+    )
+
+    logger.info(
+        "Quarantine stream started: output=%s checkpoint=%s",
+        QUARANTINE_OUTPUT_PATH,
+        QUARANTINE_CHECKPOINT_PATH,
+    )
 
     try:
-        query.awaitTermination()
+        spark.streams.awaitAnyTermination()
     except KeyboardInterrupt:
         logger.info("Shutdown requested.")
     finally:
-        if query.isActive:
+        for query in spark.streams.active:
             query.stop()
         spark.stop()
 

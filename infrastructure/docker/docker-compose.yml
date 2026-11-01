@@ -68,8 +68,6 @@ services:
       context: ../../spark
       dockerfile: Dockerfile
     container_name: fluxcart-spark
-    env_file:
-      - ../../.env.spark.minio
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC: ecommerce-events
@@ -77,12 +75,17 @@ services:
       CHECKPOINT_PATH: s3a://fluxcart-raw/checkpoints/events/
       KAFKA_STARTING_OFFSETS: earliest
       LOG_LEVEL: INFO
-      S3A_ENDPOINT: http://minio:9000
+      HADOOP_CONF_DIR: /opt/fluxcart/secrets
+      QUARANTINE_OUTPUT_PATH: s3a://fluxcart-raw/quarantine/
+      QUARANTINE_CHECKPOINT_PATH: s3a://fluxcart-raw/checkpoints/quarantine/
     volumes:
       - ../../spark/data:/opt/fluxcart/data
       - ../../spark/checkpoints:/opt/fluxcart/checkpoints
+      - ../../spark/secrets:/opt/fluxcart/secrets:ro
     depends_on:
       kafka-init:
+        condition: service_completed_successfully
+      minio-init:
         condition: service_completed_successfully
     restart: unless-stopped
 
