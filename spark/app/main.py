@@ -1,11 +1,14 @@
 import logging
 import os
 import sys
-
+import json
+import threading
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (col, concat_ws, from_json, lit,
                                    to_timestamp, try_to_timestamp, when)
 from pyspark.sql.types import DoubleType, StringType, StructField, StructType
+from datetime import datetime, timezone
+
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -103,6 +106,42 @@ def read_kafka(spark, starting_offsets):
         .load()
     )
 
+def write_streaming_metrics(queries, stop_event):
+    metrics_path = "/opt/fluxcart/data/streaming_metrics.json"
+    temp_path = metrics_path + ".tmp"
+
+    while not stop_event.is_set():
+        try:
+            query_metrics = []
+
+            for query in queries:
+                progress = query.lastProgress
+
+                query_metrics.append({
+                    "name": query.name,
+                    "id": str(query.id),
+                    "is_active": query.isActive,
+                    "status": query.status,
+                    "progress": progress,
+                })
+
+            metrics = {
+                "application": "FluxCartKafkaStream",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "queries": query_metrics,
+            }
+
+            os.makedirs(os.path.dirname(metrics_path), exist_ok=True)
+
+            with open(temp_path, "w") as file:
+                json.dump(metrics, file, indent=2, default=str)
+
+            os.replace(temp_path, metrics_path)
+
+        except Exception:
+            logger.exception("Failed to write streaming metrics")
+
+        stop_event.wait(5)
 
 def main():
     ivy_dir = "/tmp/fluxcart-ivy"
@@ -278,13 +317,28 @@ def main():
         QUARANTINE_CHECKPOINT_PATH,
     )
 
+    monitor_stop_event = threading.Event()
+
+    monitor_thread = threading.Thread(
+        target=write_streaming_metrics,
+        args=([raw_query, quarantine_query], monitor_stop_event),
+        daemon=True,
+        name="fluxcart-streaming-monitor",
+    )
+
+    monitor_thread.start()
+
     try:
         spark.streams.awaitAnyTermination()
     except KeyboardInterrupt:
         logger.info("Shutdown requested.")
     finally:
+        monitor_stop_event.set()
+        monitor_thread.join(timeout=6)
+
         for query in spark.streams.active:
             query.stop()
+
         spark.stop()
 
 

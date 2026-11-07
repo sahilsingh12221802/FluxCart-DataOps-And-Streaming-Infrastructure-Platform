@@ -1,7 +1,9 @@
-# OS
+# Operating system
 .DS_Store
+.AppleDouble
+.LSOverride
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 
@@ -13,13 +15,18 @@ __pycache__/
 .venv/
 venv/
 
-# Environment
+# Environment and secrets
 .env
 .env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
 
-# Node
+# Node.js
 node_modules/
 dist/
+.vite/
 
 # Spark
 *.class
@@ -27,21 +34,27 @@ dist/
 target/
 spark/data/
 spark/checkpoints/
+spark/secrets/
+
+# Runtime databases
+backend/data/
+*.db
+*.sqlite
+*.sqlite3
 
 # Logs
 *.log
 logs/
 
-# Data
-data/
+# Data files
 *.parquet
 
-# Temporary
+# Temporary and backup files
 tmp/
 temp/
+*.bak
+*.before-*
+*.pre-*
 
-# Docker
+# Docker runtime volumes
 docker-volumes/
-s
-# Local Hadoop credentials and configuration
-spark/secrets/
