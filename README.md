@@ -75,7 +75,8 @@ flowchart LR
 │   ├── requirements.txt
 │   └── data/                 # Local SQLite history; ignored by Git
 ├── docs/
-│   └── architecture.md
+│   ├── architecture.md
+│   └── images/               # Dashboard, Spark, and API screenshots
 ├── event-simulator/
 │   ├── app/
 │   │   ├── event_generator.py
@@ -206,13 +207,89 @@ A non-secret event simulator template is provided at [event-simulator/.env.examp
 
 ## Screenshots
 
-Dashboard and pipeline screenshots will be added here as the project walkthrough is finalized.
+The following screenshots are captured from the running FluxCart application. They are organized by dashboard area so that each view can show its metrics and interface details clearly.
+
+### 1. Dashboard Overview
+
+The Overview section brings together the platform's high-level operational picture, including event activity, infrastructure status, and recent event records. The screenshots below show separate areas of the page to keep the information readable.
+
+**Platform overview and key metrics**
+
+![FluxCart dashboard overview](docs/images/dashboard-overview/01-dashboard-overview.png)
+
+*FluxCart Dashboard Overview — A consolidated view of platform-level metrics and the current state of the streaming application.*
+
+**Event analytics and infrastructure health**
+
+![FluxCart event analytics and infrastructure health](docs/images/dashboard-overview/02-dashboard-overview%20event%20and%20infastructure%20part.png)
+
+*Event Analytics & Infrastructure Health — Event activity alongside the health and availability of the platform's supporting services.*
+
+**Recent event records**
+
+![FluxCart recent event records](docs/images/dashboard-overview/03-dashboard-overview%20recent%20event%20records.png)
+
+*Recent Event Records — A closer look at the latest generated e-commerce events visible through the dashboard.*
+
+### 2. Streaming Monitoring
+
+The Streaming Monitoring section focuses on the processing pipeline and its runtime behavior. It presents the processing flow, infrastructure health, Kafka monitoring statistics, and current as well as historical throughput.
+
+**Data processing flow and infrastructure health**
+
+![FluxCart streaming processing flow and infrastructure health](docs/images/streaming-monitoring/01-streaming-monitoring%20data%20processing%20flow%20and%20infra%20health.png)
+
+*Streaming Pipeline & Infrastructure Health — An operational view of the data-processing flow and the health of the streaming infrastructure.*
+
+**Apache Kafka monitoring**
+
+![FluxCart Apache Kafka monitoring](docs/images/streaming-monitoring/02-streaming-monitoring%20apache%20kafka%20monitor%20and%20different%20cards%20for%20stats.png)
+
+*Apache Kafka Monitoring — Kafka monitoring cards and topic-related statistics that provide visibility into event ingestion.*
+
+**Streaming throughput and historical throughput**
+
+![FluxCart streaming throughput and historical throughput](docs/images/streaming-monitoring/03-streaming-monitoring%20streaming%20throughpout%20and%20historical%20throughpout.png)
+
+*Streaming Throughput & Historical Trends — Current streaming throughput presented alongside historical processing trends.*
+
+### 3. Data Lake
+
+The Data Lake view provides visibility into the datasets persisted by the streaming pipeline, including the MinIO-backed storage layer.
+
+![FluxCart data lake](docs/images/data-lake/01-data-lake.png)
+
+*Data Lake Explorer — A view of the platform's stored streaming datasets and data-lake information.*
+
+### 4. Data Quality
+
+The Data Quality view highlights validation results and rejected records, helping inspect the quality of incoming event data and the quarantine workflow.
+
+![FluxCart data quality](docs/images/data-quality/01-data-quality.png)
+
+*Data Quality & Quarantine — Monitoring event validation and inspecting records routed to quarantine.*
+
+### 5. Apache Spark Dashboard
+
+The Spark dashboard provides a view into the Spark application's execution activity and streaming workload.
+
+![FluxCart Apache Spark dashboard](docs/images/spark/spark%20dashboard.png)
+
+*Apache Spark Dashboard — Runtime visibility into Spark application execution and processing activity.*
+
+### 6. API Documentation
+
+FluxCart exposes its backend functionality through FastAPI. The Swagger UI provides an interactive reference for exploring and testing the available API endpoints.
+
+![FluxCart Swagger UI](docs/images/api-documentation/Swagger%20UI.png)
+
+*FastAPI Swagger UI — Interactive API documentation for the FluxCart backend endpoints.*
 
 ## Future improvements
 
 - Add automated backend and streaming integration tests.
 - Add CI checks for linting, Python tests, and frontend production builds.
-- Add dashboard screenshot assets and a concise demo walkthrough.
+- Add a concise end-to-end demo walkthrough.
 - Evaluate production deployment options, secret management, and service health monitoring.
 
 ---
